@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+
+{% block title %}Cadastrar - Meu Sistema{% endblock %}
+
+{% block content %}
+  <div class="form-container">
+    <h2>Cadastro</h2>
+    <form method="post">
+      {{ form.hidden_tag() }}
+      {{ form.name.label }} {{ form.name(size=20) }}<br>
+      {{ form.username.label }} {{ form.username(size=20) }}<br>
+      {{ form.password.label }} {{ form.password() }}<br>
+      {{ form.confirm.label }} {{ form.confirm() }}<br>
+      {{ form.submit() }}
+    </form>
+  </div>
+{% endblock %}

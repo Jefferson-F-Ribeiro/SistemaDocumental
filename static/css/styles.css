@@ -1,0 +1,49 @@
+/* static/css/styles.css */
+body {
+    font-family: 'Arial', sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f4f4;
+}
+
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.header {
+    background-color: hsl(197, 68%, 55%);
+    color: #fff;
+    padding: 10px;
+    text-align: center;
+}
+
+.form-container {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.success {
+    color: #008000;
+}
+
+.error {
+    color: #ff0000;
+}
+
+.home-container {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    margin-top: 20px;
+}
+
+.logout-link {
+    color: #e44d26;
+    text-decoration: none;
+    font-weight: bold;
+}
