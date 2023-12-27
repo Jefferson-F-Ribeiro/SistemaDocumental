@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, url_for, flash, send_file, abort
+from flask import Flask, render_template, redirect, url_for, flash, send_file, abort, request
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, validators
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
@@ -16,11 +16,17 @@ from OpenSSL import crypto
 import time
 import os
 import fitz
+import tempfile
 
 app = Flask(__name__, static_url_path='/static')
 app.config['SECRET_KEY'] = 'chave_secreta_super_secreta'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
 app.config['UPLOAD_FOLDER'] = 'uploads'
+
+ALLOWED_EXTENSIONS = {'pdf'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 db.init_app(app)
 
@@ -299,6 +305,47 @@ def apply_digital_signature(input_path, output_path, signature_id, name, reason=
     os.remove(certificate_path)
     os.remove(private_key_path)
 
+def is_pdf_signed(pdf_path):
+    try:
+        pdf_document = fitz.open(pdf_path)
+
+        for page_number in range(pdf_document.page_count):
+            page = pdf_document[page_number]
+
+            # Check if the page has annotations (digital signatures)
+            annotations = page.get_text("text", clip=page.rect)
+
+            if "Signed by:" in annotations:
+                return True  # PDF has a digital signature
+
+        return False  # No digital signatures found
+
+    except Exception as e:
+        print(f"Error checking digital signature: {e}")
+        return False
+
+@app.route('/check_pdf_signature', methods=['POST'])
+def check_pdf_signature():
+    if 'pdf_file' not in request.files:
+        return "No PDF file uploaded", 400
+
+    pdf_file = request.files['pdf_file']
+
+    if pdf_file.filename == '':
+        return "No selected file", 400
+
+    if pdf_file and allowed_file(pdf_file.filename):
+        # Save the uploaded PDF temporarily
+        temp_pdf_path = os.path.join(tempfile.gettempdir(), pdf_file.filename)
+        pdf_file.save(temp_pdf_path)
+
+        # Check if the PDF has a digital signature
+        if is_pdf_signed(temp_pdf_path):
+            return "The PDF has a digital signature."
+        else:
+            return "The PDF does not have a digital signature."
+
+    return "Invalid file format", 400
 
 if __name__ == '__main__':
     with app.app_context():

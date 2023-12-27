@@ -3,4 +3,13 @@
 {% block content %}
   <p><a href="{{ url_for('register') }}">Cadastrar</a></p>
   <p><a href="{{ url_for('login') }}">Login</a></p>
+
+  <h3>Checar Assinatura</h3>
+  <form method="post" action="{{ url_for('check_pdf_signature') }}" enctype="multipart/form-data">
+    <div class="form-group">
+      <label for="pdf_file">Upload PDF File:</label>
+      <input type="file" name="pdf_file" accept=".pdf" class="form-control-file" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Checar Assinatura</button>
+  </form>
 {% endblock %}
