@@ -3,7 +3,7 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField, validators
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from models import db, User, PdfModel
-from forms import PdfForm
+from forms import *
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 import os
@@ -12,10 +12,15 @@ from reportlab.pdfgen import canvas
 import hashlib
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from OpenSSL import crypto
+import time
+import os
+import fitz
 
 app = Flask(__name__, static_url_path='/static')
 app.config['SECRET_KEY'] = 'chave_secreta_super_secreta'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
+app.config['UPLOAD_FOLDER'] = 'uploads'
 
 db.init_app(app)
 
@@ -206,6 +211,94 @@ def logout():
     logout_user()
     flash('Logout realizado com sucesso!', 'success')
     return redirect(url_for('index'))
+
+@app.route('/sign_pdf', methods=['GET', 'POST'])
+@login_required
+def sign_pdf():
+    form = SignatureForm()
+
+    if form.validate_on_submit():
+        pdf_file = form.pdf_file.data
+        signature_id = form.signature_id.data
+        name = form.name.data
+        reason = form.reason.data
+        location = form.location.data
+
+        # Save the uploaded PDF temporarily
+        pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], pdf_file.filename)
+        pdf_file.save(pdf_path)
+
+        # Create a temporary output file path
+        output_path = os.path.join(app.config['UPLOAD_FOLDER'], 'signed_' + pdf_file.filename)
+
+        # Apply digital signature
+        apply_digital_signature(pdf_path, output_path, signature_id, name, reason, location)
+
+        # Clean up: Remove the temporary uploaded PDF
+        os.remove(pdf_path)
+
+        # Provide the signed PDF for download
+        return send_file(output_path, as_attachment=True, download_name='signed_pdf.pdf')
+
+    return render_template('sign_pdf.html', form=form)
+
+def createKeyPair(type, bits):
+    pkey = crypto.PKey()
+    pkey.generate_key(type, bits)
+    return pkey
+
+def create_self_signed_cert(pKey, name):
+    cert = crypto.X509()
+    cert.get_subject().CN = name
+    cert.set_serial_number(int(time.time() * 10))
+    cert.gmtime_adj_notBefore(0)
+    cert.gmtime_adj_notAfter(10 * 365 * 24 * 60 * 60)
+    cert.set_issuer(cert.get_subject())
+    cert.set_pubkey(pKey)
+    cert.sign(pKey, 'sha256')  # Use 'sha256' instead of 'md5'
+    return cert
+
+def apply_digital_signature(input_path, output_path, signature_id, name, reason="Testing", location="City"):
+    pdf_document = fitz.open(input_path)
+
+    # Generate key pair and self-signed certificate
+    pkey = createKeyPair(crypto.TYPE_RSA, 2048)
+    cert = create_self_signed_cert(pkey, name)
+
+    # Save the certificate and private key to temporary files
+    certificate_path = "temp_certificate.pem"
+    private_key_path = "temp_private_key.pem"
+
+    with open(certificate_path, "wb") as cert_file:
+        cert_file.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert))
+
+    with open(private_key_path, "wb") as key_file:
+        key_file.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, pkey))
+
+    # Load the certificate and private key from temporary files
+    with open(certificate_path, "rb") as cert_file:
+        certificate_data = cert_file.read()
+
+    with open(private_key_path, "rb") as key_file:
+        private_key_data = key_file.read()
+
+    # Apply the digital signature to each page
+    for page_number in range(pdf_document.page_count):
+        page = pdf_document[page_number]
+
+        # Coordinates for the signature
+        point = fitz.Point(100, 100)
+
+        # Insert the digital signature into the PDF
+        page.insert_text(point, f"Signed by: {name}")
+
+    # Save the modified PDF
+    pdf_document.save(output_path)
+
+    # Clean up: Remove temporary files
+    os.remove(certificate_path)
+    os.remove(private_key_path)
+
 
 if __name__ == '__main__':
     with app.app_context():
