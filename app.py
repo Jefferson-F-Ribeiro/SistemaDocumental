@@ -3,6 +3,7 @@ import hashlib
 import os
 import tempfile
 import time
+import fitz
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
