@@ -9,7 +9,7 @@ class User(UserMixin, db.Model):
     name = db.Column(db.String(100), nullable=False)
     username = db.Column(db.String(20), unique=True, nullable=False)
     password = db.Column(db.String(60), nullable=False)
-    key_hash = db.Column(db.String(32), nullable=False)  # Hash para a chave do usuário
+    key_hash = db.Column(db.String(32), nullable=False) 
     pdfs = db.relationship('PdfModel', backref='author', lazy=True)
 
     def __repr__(self):

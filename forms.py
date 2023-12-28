@@ -1,7 +1,6 @@
 from flask_wtf import FlaskForm
-from wtforms import TextAreaField, SubmitField
 from flask_wtf.file import FileField, FileRequired
-from wtforms import StringField, SubmitField
+from wtforms import StringField, SubmitField, TextAreaField
 from wtforms.validators import DataRequired
 
 class PdfForm(FlaskForm):

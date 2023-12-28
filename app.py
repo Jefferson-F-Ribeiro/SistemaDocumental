@@ -1,22 +1,23 @@
-from flask import Flask, render_template, redirect, url_for, flash, send_file, abort, request
-from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, validators
-from flask_login import LoginManager, login_user, login_required, logout_user, current_user
-from models import db, User, PdfModel
-from forms import *
+import io
+import hashlib
+import os
+import tempfile
+import time
+
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
-import os
-import io
-from reportlab.pdfgen import canvas
-import hashlib
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from flask import Flask, render_template, redirect, url_for, flash, send_file, abort, request
+from flask_login import LoginManager, login_user, login_required, logout_user, current_user
+from flask_wtf import FlaskForm
 from OpenSSL import crypto
-import time
-import os
-import fitz
-import tempfile
+from reportlab.pdfgen import canvas
+from wtforms import StringField, PasswordField, SubmitField, validators
+
+from forms import *
+from models import db, User, PdfModel
+
 
 app = Flask(__name__, static_url_path='/static')
 app.config['SECRET_KEY'] = 'chave_secreta_super_secreta'
@@ -56,37 +57,7 @@ def generate_key_hash(key):
     return hashlib.md5(key.encode('utf-8')).hexdigest()
 
 def encrypt_content(content, key_hash):
-    # Derivar a chave usando PBKDF2 com SHA-256
     salt = os.urandom(16)
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,  # Comprimento da chave em bytes
-        salt=salt,
-        iterations=100000,  # Ajuste conforme necessário
-        backend=default_backend()
-    )
-    derived_key = kdf.derive(key_hash.encode('utf-8'))
-
-    # Gerar um IV (vetor de inicialização) aleatório
-    iv = os.urandom(16)
-
-    # Criar o objeto Cipher
-    cipher = Cipher(algorithms.AES(derived_key), modes.CFB(iv), backend=default_backend())
-    encryptor = cipher.encryptor()
-
-    # Criptografar o conteúdo
-    ciphertext = encryptor.update(content.encode('utf-8')) + encryptor.finalize()
-
-    # Retornar IV e texto cifrado (e.g., para armazenar no banco de dados)
-    return salt + iv + ciphertext
-
-def decrypt_content(ciphertext, key_hash):
-    # Extrair o salt, IV e conteúdo cifrado
-    salt = ciphertext[:16]
-    iv = ciphertext[16:32]
-    content_ciphertext = ciphertext[32:]
-
-    # Derivar a chave usando PBKDF2 com SHA-256
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -96,11 +67,32 @@ def decrypt_content(ciphertext, key_hash):
     )
     derived_key = kdf.derive(key_hash.encode('utf-8'))
 
-    # Criar o objeto Cipher
+    iv = os.urandom(16)
+
+    cipher = Cipher(algorithms.AES(derived_key), modes.CFB(iv), backend=default_backend())
+    encryptor = cipher.encryptor()
+
+    ciphertext = encryptor.update(content.encode('utf-8')) + encryptor.finalize()
+
+    return salt + iv + ciphertext
+
+def decrypt_content(ciphertext, key_hash):
+    salt = ciphertext[:16]
+    iv = ciphertext[16:32]
+    content_ciphertext = ciphertext[32:]
+
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100000,
+        backend=default_backend()
+    )
+    derived_key = kdf.derive(key_hash.encode('utf-8'))
+
     cipher = Cipher(algorithms.AES(derived_key), modes.CFB(iv), backend=default_backend())
     decryptor = cipher.decryptor()
 
-    # Descriptografar o conteúdo
     decrypted_content = decryptor.update(content_ciphertext) + decryptor.finalize()
 
     return decrypted_content.decode('utf-8')
@@ -156,7 +148,6 @@ def home():
         db.session.add(new_pdf)
         db.session.commit()
 
-        # Iprime o conteúdo encriptado no console
         print(f'Encrypted PDF Content: {encrypted_content}')
 
         flash('PDF salvo com sucesso!', 'success')
@@ -184,7 +175,6 @@ def download_pdf(pdf_id):
     pdf = PdfModel.query.get_or_404(pdf_id)
     decrypted_content = decrypt_content(pdf.content, current_user.key_hash)
 
-    # Iprime o conteúdo desencriptado no console
     print(f'Decrypted PDF Content: {decrypted_content}')
 
     buffer = io.BytesIO()
@@ -230,20 +220,15 @@ def sign_pdf():
         reason = form.reason.data
         location = form.location.data
 
-        # Save the uploaded PDF temporarily
         pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], pdf_file.filename)
         pdf_file.save(pdf_path)
 
-        # Create a temporary output file path
         output_path = os.path.join(app.config['UPLOAD_FOLDER'], 'signed_' + pdf_file.filename)
 
-        # Apply digital signature
         apply_digital_signature(pdf_path, output_path, signature_id, name, reason, location)
 
-        # Clean up: Remove the temporary uploaded PDF
         os.remove(pdf_path)
 
-        # Provide the signed PDF for download
         return send_file(output_path, as_attachment=True, download_name='signed_pdf.pdf')
 
     return render_template('sign_pdf.html', form=form)
@@ -261,17 +246,15 @@ def create_self_signed_cert(pKey, name):
     cert.gmtime_adj_notAfter(10 * 365 * 24 * 60 * 60)
     cert.set_issuer(cert.get_subject())
     cert.set_pubkey(pKey)
-    cert.sign(pKey, 'sha256')  # Use 'sha256' instead of 'md5'
+    cert.sign(pKey, 'sha256')
     return cert
 
 def apply_digital_signature(input_path, output_path, signature_id, name, reason="Testing", location="City"):
     pdf_document = fitz.open(input_path)
 
-    # Generate key pair and self-signed certificate
     pkey = createKeyPair(crypto.TYPE_RSA, 2048)
     cert = create_self_signed_cert(pkey, name)
 
-    # Save the certificate and private key to temporary files
     certificate_path = "temp_certificate.pem"
     private_key_path = "temp_private_key.pem"
 
@@ -281,27 +264,21 @@ def apply_digital_signature(input_path, output_path, signature_id, name, reason=
     with open(private_key_path, "wb") as key_file:
         key_file.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, pkey))
 
-    # Load the certificate and private key from temporary files
     with open(certificate_path, "rb") as cert_file:
         certificate_data = cert_file.read()
 
     with open(private_key_path, "rb") as key_file:
         private_key_data = key_file.read()
 
-    # Apply the digital signature to each page
     for page_number in range(pdf_document.page_count):
         page = pdf_document[page_number]
 
-        # Coordinates for the signature
         point = fitz.Point(100, 100)
 
-        # Insert the digital signature into the PDF
         page.insert_text(point, f"Signed by: {name}")
 
-    # Save the modified PDF
     pdf_document.save(output_path)
 
-    # Clean up: Remove temporary files
     os.remove(certificate_path)
     os.remove(private_key_path)
 
@@ -312,13 +289,12 @@ def is_pdf_signed(pdf_path):
         for page_number in range(pdf_document.page_count):
             page = pdf_document[page_number]
 
-            # Check if the page has annotations (digital signatures)
             annotations = page.get_text("text", clip=page.rect)
 
             if "Signed by:" in annotations:
-                return True  # PDF has a digital signature
+                return True
 
-        return False  # No digital signatures found
+        return False
 
     except Exception as e:
         print(f"Error checking digital signature: {e}")
@@ -335,15 +311,13 @@ def check_pdf_signature():
         return "No selected file", 400
 
     if pdf_file and allowed_file(pdf_file.filename):
-        # Save the uploaded PDF temporarily
         temp_pdf_path = os.path.join(tempfile.gettempdir(), pdf_file.filename)
         pdf_file.save(temp_pdf_path)
 
-        # Check if the PDF has a digital signature
         if is_pdf_signed(temp_pdf_path):
-            return "The PDF has a digital signature."
+            return "O PDF possui assinatura digital"
         else:
-            return "The PDF does not have a digital signature."
+            return "O PDF nao possui assinatura digital"
 
     return "Invalid file format", 400
 
