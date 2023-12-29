@@ -4,6 +4,7 @@ from datetime import datetime
 
 db = SQLAlchemy()
 
+
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
@@ -11,10 +12,11 @@ class User(UserMixin, db.Model):
     password = db.Column(db.String(60), nullable=False)
     key_hash = db.Column(db.String(32), nullable=False) 
     pdfs = db.relationship('PdfModel', backref='author', lazy=True)
+    admin = db.Column(db.Boolean, nullable=False) 
 
     def __repr__(self):
-        return f'<User {self.username}>'
-
+        return f'<User {self.username}>'   
+    
 class PdfModel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)

@@ -1,40 +1,22 @@
-import datetime
 import io
 import hashlib
 import os
-import tempfile
 import time
-from datetime import *
-
+from datetime import datetime
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from flask import Flask, jsonify, render_template, redirect, url_for, flash, send_file, abort, request
+from flask import Flask, render_template, redirect, url_for, flash, send_file, abort, request
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from flask_wtf import FlaskForm
-import OpenSSL
 from reportlab.pdfgen import canvas
 from wtforms import StringField, PasswordField, SubmitField, validators
-
-from forms import *
 from models import db, User, PdfModel, SignedPdf
-
 import OpenSSL
-import os
-import time
 from apryse_sdk import *
 from typing import Tuple
-import PyPDF2
-from OpenSSL.crypto import FILETYPE_PEM
-from werkzeug.utils import secure_filename
-import OpenSSL.crypto
-from cryptography import x509
-from cryptography import x509
-from cryptography.hazmat.backends import default_backend
-from OpenSSL import crypto
-import PyPDF4
-from PyPDF4 import PdfFileReader, PdfFileWriter
+from PDFNetPython import *
 
 app = Flask(__name__, static_url_path='/static')
 app.config['SECRET_KEY'] = 'chave_secreta_super_secreta'
@@ -125,29 +107,33 @@ def decrypt_content(ciphertext, key_hash):
 
 @app.route('/')
 def index():
+    create_admin()
     return render_template('index.html')
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     form = RegistrationForm()
     if form.validate_on_submit():
-        key_hash = generate_key_hash(form.username.data)
+        try:
+            key_hash = generate_key_hash(form.username.data)
 
-        new_user = User(
-            name=form.name.data,
-            username=form.username.data,
-            password=form.password.data,
-            key_hash=key_hash
-        )
+            new_user = User(
+                name=form.name.data,
+                username=form.username.data,
+                password=form.password.data,
+                key_hash=key_hash,
+                admin=False
+            )
 
-        db.session.add(new_user)
-        db.session.commit()
-
-        flash('Cadastro realizado com sucesso!', 'success')
-        log_message = f'Um usuário chamado {form.name.data} foi cadastrado.'
-        adicionar_entrada_log(log_message)
-
-        return redirect(url_for('index'))
+            db.session.add(new_user)
+            db.session.commit()
+            flash('Cadastro realizado com sucesso!', 'success')
+            log_message = f'Um usuário chamado {form.name.data} foi cadastrado.'
+            adicionar_entrada_log(log_message)
+            return redirect(url_for('index'))
+        
+        except Exception as e:
+            print(e)
 
     return render_template('register.html', form=form)
 
@@ -159,10 +145,16 @@ def login():
 
         if user:
             login_user(user)
-            flash('Login bem-sucedido!', 'success')
-            log_message = f'O usuário chamado {user.username} logou no sistema.'
-            adicionar_entrada_log(log_message)
-            return redirect(url_for('home'))
+            if (user.admin == False):
+                flash('Login bem-sucedido!', 'success')
+                log_message = f'O usuário chamado {user.username} logou no sistema.'
+                adicionar_entrada_log(log_message)
+                return redirect(url_for('home'))
+            elif (user.admin):
+                flash('Login bem-sucedido!', 'success')
+                log_message = f'O Administrador {user.username} logou no sistema.'
+                adicionar_entrada_log(log_message)
+                return redirect(url_for('home'))
         else:
             flash('Nome de usuário ou senha incorretos. Tente novamente.', 'danger')
     return render_template('login.html', form=form)
@@ -188,6 +180,15 @@ def home():
         return redirect(url_for('home'))
 
     return render_template('home.html', form=form, pdfs=pdfs)
+
+@app.route('/download_log', methods=['GET'])
+@login_required
+def download_log():
+    if not current_user.admin:
+        abort(403)
+
+    log_path = 'app.log'
+    return send_file(log_path, as_attachment=True)
 
 @app.route('/edit_pdf/<int:pdf_id>', methods=['GET', 'POST'])
 @login_required
@@ -319,8 +320,6 @@ def load(name):
     print("############################################################################")
     return True
 
-from PDFNetPython import *
-
 def sign_file(input_file: str, signatureID: str, x_coordinate: int, 
             y_coordinate: int, pages: Tuple = None, output_file: str = None
               ):
@@ -377,7 +376,6 @@ def sign_file(input_file: str, signatureID: str, x_coordinate: int,
         db.session.add(new_s_pdf)
         db.session.commit()
 
-        # Printing Summary
         print("## Summary ########################################################")
         print("\n".join("{}:{}".format(i, j) for i, j in summary.items()))
         print("###################################################################")
@@ -395,56 +393,61 @@ def sign_pdf():
         return render_template("sign_pdf.html")
 
     if request.method == "POST":
-        # Obter o PDF do usuário
         file = request.files["pdf"]
         if file.filename == "":
             return render_template("sign_pdf.html", error="Você precisa selecionar um PDF para assinar.")
 
-        # Salvar o PDF em um local definitivo
         output_pdf = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
-        file.save(output_pdf)  # Salva o arquivo original diretamente no local definitivo
+        file.save(output_pdf) 
 
-        # Obter o nome do certificado
         name = request.form["name"]
 
         load(name)
 
-        # Assinar o PDF
         id = str(generate_key_hash(name))
 
         log_message = f'O usuário chamado {current_user.username} assinou um PDF com a chave {id}.'
         adicionar_entrada_log(log_message)
 
-        return send_file(sign_file(output_pdf,id,300,100), as_attachment=True) # Envia o arquivo assinado como download
+        return send_file(sign_file(output_pdf,id,300,100), as_attachment=True)
     
 
 @app.route('/check_pdf_signature', methods=['POST'])
 def check_pdf_signature():
     try:
-        # Obtém a string de busca do corpo da solicitação
         chave_procurada = request.form.get('chave_procurada')
 
-        # Realiza a busca no banco de dados
         resultado = SignedPdf.query.filter(SignedPdf.pub_key == chave_procurada).first()
 
         if resultado:
-            # Se encontrar, retorna uma mensagem de sucesso
             log_message = f'A chave {chave_procurada} foi buscada e considerada válida.'
             adicionar_entrada_log(log_message)
             flash('Assinatura válida', 'success')
             return redirect(url_for('index'))
         else:
-            # Se não encontrar, retorna uma mensagem de falha
             log_message = f'A chave {chave_procurada} foi buscada e considerada não válida.'
             adicionar_entrada_log(log_message)
             flash('Assinatura não válida', 'danger')
             return redirect(url_for('index'))
 
     except Exception as e:
-        # Se ocorrer algum erro, retorna uma mensagem de erro
         print({'mensagem': f'Erro: {str(e)}'})
         flash('Falha na checagem', 'danger')
         return redirect(url_for('index'))
+    
+def create_admin():
+    if User.query.filter_by(username='admin').first() is None:
+        admin_password = 'admin'
+        key_hash = generate_key_hash('admin')
+        admin = User(
+            name = 'admin',
+            username='admin',
+            password=admin_password,
+            key_hash=key_hash,
+            admin=True
+        )
+        db.session.add(admin)
+        db.session.commit()
 
 if __name__ == '__main__':
     with app.app_context():
