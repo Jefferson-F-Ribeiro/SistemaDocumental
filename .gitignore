@@ -1511,3 +1511,4 @@ static/public_key.pem
 instance/site.db
 uploads/
 app.log
+venv/

@@ -18,6 +18,7 @@ from apryse_sdk import *
 from typing import Tuple
 from PDFNetPython import *
 
+
 app = Flask(__name__, static_url_path='/static')
 app.config['SECRET_KEY'] = 'chave_secreta_super_secreta'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
@@ -450,6 +451,9 @@ def create_admin():
         db.session.commit()
 
 if __name__ == '__main__':
+    port = int(os.getenv('PORT'), '5000')
+
     with app.app_context():
         db.create_all()
-    app.run(debug=True)
+
+    app.run(host='0.0.0.0', port=port)
