@@ -20,3 +20,9 @@ class PdfModel(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class SignedPdf(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    pub_key = db.Column(db.String, nullable=False)
+    user = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
