@@ -1,5 +1,5 @@
 alembic==1.13.1
-apryse-sdk==10.6.0.1
+apryse-sdk --extra-index-url=https://pypi.apryse.com
 blinker==1.7.0
 cffi==1.16.0
 chardet==5.2.0
