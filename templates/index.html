@@ -3,4 +3,13 @@
 {% block content %}
   <p><a href="{{ url_for('register') }}">Cadastrar</a></p>
   <p><a href="{{ url_for('login') }}">Login</a></p>
+
+  <h3>Checar Assinatura</h3>
+
+  <form action="{{ url_for ('check_pdf_signature') }}" method="post">
+      <label for="chave_procurada">Chave:</label>
+      <input type="text" id="chave_procurada" name="chave_procurada" required>
+      <button type="submit">Checar</button>
+  </form>
+
 {% endblock %}

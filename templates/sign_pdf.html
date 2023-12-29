@@ -1,36 +1,9 @@
 {% extends 'base.html' %}
 
 {% block content %}
-  <div class="sign-pdf-container">
-    <h2>Sign PDF</h2>
-    <form method="post" action="{{ url_for('sign_pdf') }}" enctype="multipart/form-data">
-      {{ form.hidden_tag() }}
-      <div class="form-group">
-        {{ form.pdf_file.label }}
-        <br>
-        {{ form.pdf_file(class="form-control") }}
-      </div>
-      <div class="form-group">
-        {{ form.signature_id.label }}
-        <br>
-        {{ form.signature_id(class="form-control") }}
-      </div>
-      <div class="form-group">
-        {{ form.name.label }}
-        <br>
-        {{ form.name(class="form-control") }}
-      </div>
-      <div class="form-group">
-        {{ form.reason.label }}
-        <br>
-        {{ form.reason(class="form-control") }}
-      </div>
-      <div class="form-group">
-        {{ form.location.label }}
-        <br>
-        {{ form.location(class="form-control") }}
-      </div>
-      <button type="submit" class="btn btn-primary">Sign PDF</button>
-    </form>
-  </div>
+<form action="/sign_pdf" method="post" enctype="multipart/form-data">
+  <input type="file" name="pdf" />
+  <input type="text" name="name" placeholder="Nome do certificado" />
+  <input type="submit" value="Assinar" />
+</form>
 {% endblock %}
