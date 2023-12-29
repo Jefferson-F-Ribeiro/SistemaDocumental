@@ -18,6 +18,7 @@ from apryse_sdk import *
 from typing import Tuple
 from PDFNetPython import *
 
+
 app = Flask(__name__, static_url_path='/static')
 app.config['SECRET_KEY'] = 'chave_secreta_super_secreta'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
@@ -420,12 +421,12 @@ def check_pdf_signature():
         resultado = SignedPdf.query.filter(SignedPdf.pub_key == chave_procurada).first()
 
         if resultado:
-            log_message = f'A chave {chave_procurada} foi buscada e considerada válida.'
+            log_message = f'A chave {chave_procurada} foi buscada e considerada válida!'
             adicionar_entrada_log(log_message)
             flash('Assinatura válida', 'success')
             return redirect(url_for('index'))
         else:
-            log_message = f'A chave {chave_procurada} foi buscada e considerada não válida.'
+            log_message = f'A chave {chave_procurada} foi buscada e considerada não válida!'
             adicionar_entrada_log(log_message)
             flash('Assinatura não válida', 'danger')
             return redirect(url_for('index'))
@@ -450,6 +451,9 @@ def create_admin():
         db.session.commit()
 
 if __name__ == '__main__':
+    port = int(os.getenv('PORT'), '5000')
+
     with app.app_context():
         db.create_all()
-    app.run(debug=True)
+
+    app.run(host='0.0.0.0', port=port)
