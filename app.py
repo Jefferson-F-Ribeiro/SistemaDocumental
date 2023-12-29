@@ -420,12 +420,12 @@ def check_pdf_signature():
         resultado = SignedPdf.query.filter(SignedPdf.pub_key == chave_procurada).first()
 
         if resultado:
-            log_message = f'A chave {chave_procurada} foi buscada e considerada válida.'
+            log_message = f'A chave {chave_procurada} foi buscada e considerada válida!'
             adicionar_entrada_log(log_message)
             flash('Assinatura válida', 'success')
             return redirect(url_for('index'))
         else:
-            log_message = f'A chave {chave_procurada} foi buscada e considerada não válida.'
+            log_message = f'A chave {chave_procurada} foi buscada e considerada não válida!'
             adicionar_entrada_log(log_message)
             flash('Assinatura não válida', 'danger')
             return redirect(url_for('index'))
