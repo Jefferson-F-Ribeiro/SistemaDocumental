@@ -10,7 +10,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from flask import Flask, render_template, redirect, url_for, flash, send_file, abort, request
+from flask import Flask, jsonify, render_template, redirect, url_for, flash, send_file, abort, request
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from flask_wtf import FlaskForm
 import OpenSSL
@@ -50,6 +50,15 @@ db.init_app(app)
 
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
+
+def adicionar_entrada_log(mensagem):
+    try:
+        with open('app.log', 'a') as log_file:
+            if not os.path.exists('app.log'):
+                log_file.write("Log file created on: {}\n".format(datetime.now()))
+            log_file.write("[{}] {}\n".format(datetime.now(), mensagem))
+    except Exception as e:
+        print(e)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -133,8 +142,13 @@ def register():
 
         db.session.add(new_user)
         db.session.commit()
+
         flash('Cadastro realizado com sucesso!', 'success')
+        log_message = f'Um usuário chamado {form.name.data} foi cadastrado.'
+        adicionar_entrada_log(log_message)
+
         return redirect(url_for('index'))
+
     return render_template('register.html', form=form)
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -146,6 +160,8 @@ def login():
         if user:
             login_user(user)
             flash('Login bem-sucedido!', 'success')
+            log_message = f'O usuário chamado {user.username} logou no sistema.'
+            adicionar_entrada_log(log_message)
             return redirect(url_for('home'))
         else:
             flash('Nome de usuário ou senha incorretos. Tente novamente.', 'danger')
@@ -166,7 +182,8 @@ def home():
         db.session.commit()
 
         print(f'Encrypted PDF Content: {encrypted_content}')
-
+        log_message = f'O usuário chamado {current_user.username} criou um PDF.'
+        adicionar_entrada_log(log_message)
         flash('PDF salvo com sucesso!', 'success')
         return redirect(url_for('home'))
 
@@ -181,6 +198,8 @@ def edit_pdf(pdf_id):
     if form.validate_on_submit():
         pdf.content = encrypt_content(form.content.data, current_user.key_hash)
         db.session.commit()
+        log_message = f'O usuário chamado {current_user.username} editou o PDF {pdf_id}.'
+        adicionar_entrada_log(log_message)
         flash('PDF editado com sucesso!', 'success')
         return redirect(url_for('home'))
 
@@ -202,6 +221,9 @@ def download_pdf(pdf_id):
 
     buffer.seek(0)
 
+    log_message = f'O usuário chamado {current_user.username} baixou o PDF {pdf_id}.'
+    adicionar_entrada_log(log_message)
+
     return send_file(buffer, as_attachment=True, download_name=f'pdf_{pdf.id}.pdf', mimetype='application/pdf')
 
 
@@ -215,12 +237,19 @@ def delete_pdf(pdf_id):
 
     db.session.delete(pdf)
     db.session.commit()
+
+    log_message = f'O usuário chamado {current_user.username} deletou o PDF {pdf_id}.'
+    adicionar_entrada_log(log_message)
+
     flash('PDF deletado com sucesso!', 'success')
     return redirect(url_for('home'))
 
 @app.route('/logout')
 @login_required
 def logout():
+    log_message = f'O usuário chamado {current_user.username} saiu do sistema.'
+    adicionar_entrada_log(log_message)
+
     logout_user()
     flash('Logout realizado com sucesso!', 'success')
     return redirect(url_for('index'))
@@ -340,6 +369,14 @@ def sign_file(input_file: str, signatureID: str, x_coordinate: int,
             "Certificate File": pk_filename
         }
 
+        new_s_pdf = SignedPdf(
+            user = current_user.id,
+            pub_key = signatureID
+        )
+
+        db.session.add(new_s_pdf)
+        db.session.commit()
+
         # Printing Summary
         print("## Summary ########################################################")
         print("\n".join("{}:{}".format(i, j) for i, j in summary.items()))
@@ -372,50 +409,42 @@ def sign_pdf():
 
         load(name)
 
-        
-
         # Assinar o PDF
+        id = str(generate_key_hash(name))
 
-        return send_file(sign_file(output_pdf,str(generate_key_hash(name)),300,100), as_attachment=True) # Envia o arquivo assinado como download
+        log_message = f'O usuário chamado {current_user.username} assinou um PDF com a chave {id}.'
+        adicionar_entrada_log(log_message)
+
+        return send_file(sign_file(output_pdf,id,300,100), as_attachment=True) # Envia o arquivo assinado como download
     
-def is_pdf_signed(pdf_path):
-    try:
-        #pdf_document = fitz.open(pdf_path)
-
-        for page_number in range(pdf_document.page_count):
-            page = pdf_document[page_number]
-
-            annotations = page.get_text("text", clip=page.rect)
-
-            if "Signed by:" in annotations:
-                return True
-
-        return False
-
-    except Exception as e:
-        print(f"Error checking digital signature: {e}")
-        return False
 
 @app.route('/check_pdf_signature', methods=['POST'])
 def check_pdf_signature():
-    if 'pdf_file' not in request.files:
-        return "No PDF file uploaded", 400
+    try:
+        # Obtém a string de busca do corpo da solicitação
+        chave_procurada = request.form.get('chave_procurada')
 
-    pdf_file = request.files['pdf_file']
+        # Realiza a busca no banco de dados
+        resultado = SignedPdf.query.filter(SignedPdf.pub_key == chave_procurada).first()
 
-    if pdf_file.filename == '':
-        return "No selected file", 400
-
-    if pdf_file and allowed_file(pdf_file.filename):
-        temp_pdf_path = os.path.join(tempfile.gettempdir(), pdf_file.filename)
-        pdf_file.save(temp_pdf_path)
-
-        if is_pdf_signed(temp_pdf_path):
-            return "O PDF possui assinatura digital"
+        if resultado:
+            # Se encontrar, retorna uma mensagem de sucesso
+            log_message = f'A chave {chave_procurada} foi buscada e considerada válida.'
+            adicionar_entrada_log(log_message)
+            flash('Assinatura válida', 'success')
+            return redirect(url_for('index'))
         else:
-            return "O PDF nao possui assinatura digital"
+            # Se não encontrar, retorna uma mensagem de falha
+            log_message = f'A chave {chave_procurada} foi buscada e considerada não válida.'
+            adicionar_entrada_log(log_message)
+            flash('Assinatura não válida', 'danger')
+            return redirect(url_for('index'))
 
-    return "Invalid file format", 400
+    except Exception as e:
+        # Se ocorrer algum erro, retorna uma mensagem de erro
+        print({'mensagem': f'Erro: {str(e)}'})
+        flash('Falha na checagem', 'danger')
+        return redirect(url_for('index'))
 
 if __name__ == '__main__':
     with app.app_context():

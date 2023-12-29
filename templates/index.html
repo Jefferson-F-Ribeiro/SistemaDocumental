@@ -5,11 +5,11 @@
   <p><a href="{{ url_for('login') }}">Login</a></p>
 
   <h3>Checar Assinatura</h3>
-  <form method="post" action="{{ url_for('check_pdf_signature') }}" enctype="multipart/form-data">
-    <div class="form-group">
-      <label for="pdf_file">Upload PDF File:</label>
-      <input type="file" name="pdf_file" accept=".pdf" class="form-control-file" required>
-    </div>
-    <button type="submit" class="btn btn-primary">Checar Assinatura</button>
+
+  <form action="{{ url_for ('check_pdf_signature') }}" method="post">
+      <label for="chave_procurada">Chave:</label>
+      <input type="text" id="chave_procurada" name="chave_procurada" required>
+      <button type="submit">Checar</button>
   </form>
+
 {% endblock %}
