@@ -1509,5 +1509,4 @@ static/container.pfx
 static/private_key.pem
 static/public_key.pem
 instance/site.db
-uploads/
 app.log
